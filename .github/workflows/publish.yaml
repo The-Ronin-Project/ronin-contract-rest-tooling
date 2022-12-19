@@ -1,0 +1,68 @@
+name: Publish Image
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # 12:00 UTC every monday
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+    inputs:
+      image_to_build:
+        description: "A specific image--or build dir--to build."
+        required: false
+        default: "all"
+  pull_request:
+jobs:
+  image-publish:
+    runs-on: self-hosted
+    outputs:
+      changed_files: ${{ steps.changes.outputs.changed_files}}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 20
+
+      - name: Set up Docker Context for Buildx
+        id: buildx-context
+        run: docker context create builder
+
+      - name: Set up QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v1
+        with:
+          image: docker-proxy.devops.projectronin.io/tonistiigi/binfmt:latest
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          install: true
+          endpoint: builder
+          driver-opts: image=docker-proxy.devops.projectronin.io/moby/buildkit:latest
+
+      - name: Login to Repo
+        run: |-
+          docker login \
+          -u "${{secrets.NEXUS_DOCKER_USERNAME}}" \
+          -p "${{secrets.NEXUS_DOCKER_PASSWORD}}" \
+          docker-repo.devops.projectronin.io
+
+      - name: Get image tag
+        id: get_image_tag
+        run: |-
+          TAG=$(echo "$(git rev-parse --short HEAD)")
+          echo ${TAG}
+          echo ::set-output name=image_tag::$(echo "${TAG}")
+
+      - name: Build specific image if PR
+        if: github.event_name == 'pull_request'
+        run: docker build --platform linux/amd64,linux/arm64 --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }}-PR .
+        working-directory: ./
+
+      - name: Build and push main branch images
+        if: github.event_name != 'pull_request'
+        run: |-
+          docker build --platform linux/amd64,linux/arm64 --push --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }} \
+                                                                 --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:v1 .
+        working-directory: ./
