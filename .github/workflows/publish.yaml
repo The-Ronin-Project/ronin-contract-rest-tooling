@@ -66,3 +66,22 @@ jobs:
           docker build --platform linux/amd64,linux/arm64 --push --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }} \
                                                                  --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:v1 .
         working-directory: ./
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: 11
+          distribution: "zulu"
+
+      - name: Run Tests
+        if: github.event_name == 'pull_request'
+        id: run_tests
+        run: ./gradlew check
+
+      - name: Publish Artifact
+        if: github.event_name != 'pull_request'
+        id: publish_artifact
+        run: ./gradlew assemble publish
+        env:
+          NEXUS_USER: ${{ secrets.NEXUS_MAVEN_USER }}
+          NEXUS_TOKEN: ${{ secrets.NEXUS_MAVEN_TOKEN }}

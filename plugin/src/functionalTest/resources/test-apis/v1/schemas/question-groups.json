@@ -1,0 +1,110 @@
+{
+    "openapi": "3.0.0",
+    "paths": {},
+    "info": {
+        "title": "",
+        "version": ""
+    },
+    "components": {
+        "schemas": {
+            "RequiredTags": {
+                "type": "object",
+                "properties": {
+                    "operator": {
+                        "type": "string",
+                        "enum": [
+                            "AND",
+                            "OR"
+                        ]
+                    },
+                    "tags": {
+                        "$ref": "shared-complex-types.json#/components/schemas/Tags"
+                    }
+                },
+                "required": [
+                    "operator",
+                    "tags"
+                ]
+            },
+            "AbstractQuestionGroup": {
+                "title": "AbstractQuestionGroup",
+                "description": "A group of questions around a subject, like a symptom",
+                "type": "object",
+                "discriminator": {
+                    "propertyName": "__type"
+                },
+                "properties": {
+                    "__type": {
+                        "type": "string"
+                    },
+                    "questionGroupId": {
+                        "$ref": "complex-identifiers.json#/components/schemas/QuestionGroupIdentifier"
+                    },
+                    "patientTitle": {
+                        "description": "For display purposes only.",
+                        "type": "string"
+                    },
+                    "providerTitle": {
+                        "description": "For displaying groups of question answers, e.g. on a symptom summary.",
+                        "type": "string"
+                    },
+                    "requiredTags": {
+                        "$ref": "#/components/schemas/RequiredTags"
+                    }
+                },
+                "required": [
+                    "__type",
+                    "questionGroupId",
+                    "patientTitle",
+                    "providerTitle"
+                ]
+            },
+            "QuestionGroup": {
+                "title": "QuestionGroup",
+                "description": "Question group",
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/AbstractQuestionGroup"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "questions": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "questions.json#/components/schemas/Question"
+                                }
+                            }
+                        },
+                        "required": [
+                            "questions"
+                        ]
+                    }
+                ]
+            },
+            "QuestionGroupState": {
+                "title": "QuestionGroupState",
+                "description": "Question group with answers",
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/AbstractQuestionGroup"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "questions": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "questions.json#/components/schemas/QuestionState"
+                                }
+                            }
+                        },
+                        "required": [
+                            "questions"
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+}

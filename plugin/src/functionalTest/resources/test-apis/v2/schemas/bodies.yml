@@ -1,0 +1,183 @@
+openapi: 3.0.0
+paths: {}
+info:
+  title: ""
+  version: ""
+components:
+  schemas:
+    AbstractResponse:
+      title: AbstractResponse
+      description: Wraps the response data
+      type: object
+      discriminator:
+        propertyName: responseType
+        mapping:
+          QUESTIONNAIRE_ASSIGNMENT: '#/components/schemas/QuestionnaireAssignmentResponse'
+          QUESTIONNAIRE_ASSIGNMENT_STATE: '#/components/schemas/QuestionnaireAssignmentStateResponse'
+          QUESTIONNAIRE_SUMMARY: '#/components/schemas/QuestionnaireSummaryResponse'
+          ERROR_RESPONSE: '#/components/schemas/ErrorResponse'
+      properties:
+        responseType:
+          $ref: 'simple-types.yml#/components/schemas/ResponseType'
+        meta:
+          type: object
+      required:
+        - responseType
+    QuestionnaireAssignmentResponse:
+      title: QuestionnaireAssignmentResponse
+      description: QuestionnaireAssignmentResponse
+      allOf:
+        - $ref: "#/components/schemas/AbstractResponse"
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/QuestionnaireAssignment'
+          required:
+            - data
+    QuestionnaireAssignmentStateResponse:
+      title: QuestionnaireAssignmentStateResponse
+      description: QuestionnaireAssignmentStateResponse
+      allOf:
+        - $ref: "#/components/schemas/AbstractResponse"
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/QuestionnaireAssignmentState'
+          required:
+            - data
+    QuestionnaireSummaryResponse:
+      title: QuestionnaireSummaryResponse
+      description: QuestionnaireSummaryResponse
+      allOf:
+        - $ref: "#/components/schemas/AbstractResponse"
+        - type: object
+          properties:
+            data:
+              $ref: 'questionnaire-summary.yml#/components/schemas/QuestionnaireSummary'
+          required:
+            - data
+    AssignmentRequestContext:
+      title: AssignmentRequestContext
+      description: The request context (patient labels) for a new questionnaire
+      type: object
+      properties:
+        patientLabels:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      required:
+        - patientLabels
+    AbstractQuestionnaireAssignment:
+      title: QuestionnaireAssignment
+      description: An assignment of a questionnaire to a patient.
+      type: object
+      discriminator:
+        propertyName: __type
+      properties:
+        __type:
+          type: string
+        questionnaireAssignmentId:
+          $ref: 'simple-types.yml#/components/schemas/QuestionnaireAssignmentId'
+        patientId:
+          $ref: 'simple-types.yml#/components/schemas/PatientId'
+        assignmentDate:
+          type: string
+          format: date-time
+      required:
+        - __type
+        - questionnaireAssignmentId
+        - patientId
+        - assignmentDate
+    QuestionnaireAssignment:
+      title: QuestionnaireAssignment
+      description: An assignment of a questionnaire to a patient.
+      allOf:
+        - $ref: "#/components/schemas/AbstractQuestionnaireAssignment"
+        - type: object
+          properties:
+            questionnaire:
+              $ref: 'questionnaires.yml#/components/schemas/Questionnaire'
+          required:
+            - questionnaire
+    QuestionnaireAssignmentState:
+      title: QuestionnaireAssignmentState
+      description: An assignment of a questionnaire to a patient, with answers
+      allOf:
+        - $ref: "#/components/schemas/AbstractQuestionnaireAssignment"
+        - type: object
+          properties:
+            questionnaire:
+              $ref: 'questionnaires.yml#/components/schemas/QuestionnaireState'
+          required:
+            - questionnaire
+    AnswersSubmitted:
+      title: AnswersSubmitted
+      description: List of IDs of answers submitted.
+      type: object
+      properties:
+        answerIds:
+          type: array
+          minItems: 1
+          items:
+            $ref: 'answers.yml#/components/schemas/AnswerStatus'
+      required:
+        - answerIds
+    AnswerSubmission:
+      title: AnswerSubmission
+      description: Answers to questions on an assignment, to be saved.
+      type: object
+      properties:
+        completed:
+          description: Is the survey to be considered "finished"?
+          type: boolean
+        answers:
+          description: An array of answers, specifying at least one.
+          type: array
+          minItems: 1
+          items:
+            $ref: 'answers.yml#/components/schemas/Answer'
+      required:
+        - completed
+        - answers
+    ErrorResponse:
+      title: ErrorResponse
+      description: An error.  Expect entries in the error field
+      allOf:
+        - $ref: "#/components/schemas/AbstractResponse"
+        - type: object
+          properties:
+            error:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                properties:
+                  httpStatus:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  status:
+                    description: The numeric http error code
+                    type: integer
+                  error:
+                    description: HTTP reason phrase
+                    type: string
+                  exception:
+                    description: Name of the exception thrown, if any
+                    type: string
+                  message:
+                    description: Short information about the error
+                    type: string
+                  detail:
+                    description: Long information about the error
+                    type: string
+                  stackTrace:
+                    description: Stack trace of error
+                    type: string
+                required:
+                  - status
+          required:
+            - error
