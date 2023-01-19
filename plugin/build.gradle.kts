@@ -1,5 +1,5 @@
 group = "com.projectronin.rest.contract"
-version = "1.0.0"
+version = "1.1.0"
 
 plugins {
     // Apply the Java Gradle plugin development plugin to add support for developing Gradle plugins
@@ -43,6 +43,7 @@ dependencies {
     implementation("org.semver4j:semver4j:4.0.0")
     implementation("com.github.node-gradle:gradle-node-plugin:3.5.0")
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.4.0.202211300538-r")
+    implementation("org.openapitools:openapi-generator-gradle-plugin:6.2.1")
 }
 
 testing {

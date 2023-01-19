@@ -5,6 +5,8 @@ a REST contract repository.  It also publishes a docker image so that the gradle
 a contract repository other than a text editor or IDE, bash, and a docker setup.  When built, a project using these tools will publish its schema as a versioned maven dependency to our internal
 maven repository.
 
+**BEWARE** that building the docker image for this repository depends on having run `./gradlew clean build publishToMavenLocal`.
+
 # Tools
 
 ## Validation
@@ -133,11 +135,6 @@ pluginManagement {
 
 ### build.gradle.kts
 ```kotlin
-node {
-    download.set(true)
-    version.set("18.12.1")
-}
-
 plugins {
     id("com.projectronin.rest.contract.support") version "<plugin version>"
 }

@@ -8,8 +8,10 @@ import com.projectronin.rest.contract.model.VersionIncrement
 import com.projectronin.rest.contract.util.WriterFactory
 import io.swagger.v3.core.util.Json
 import org.eclipse.jgit.api.Git
+import org.gradle.api.Action
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.artifacts.ArtifactRepositoryContainer
 import org.gradle.api.artifacts.dsl.RepositoryHandler
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
@@ -32,6 +34,7 @@ import java.net.URI
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import org.openapitools.generator.gradle.plugin.tasks.GenerateTask
 
 /**
  * A simple 'hello world' plugin.
@@ -278,35 +281,29 @@ class RestContractSupportPlugin : Plugin<Project> {
         }
     }
 
+    @Suppress("ObjectLiteralToLambda")
     private fun registerDocsTask(
         tasks: TaskContainer,
         versionDir: VersionDir,
         settings: SettingsImpl,
         project: Project
     ) {
-        tasks.register(versionDir.asTaskName(settings.docsTaskName), NpxTask::class.java) { task ->
+        tasks.register(versionDir.asTaskName(settings.docsTaskName), GenerateTask::class.java) { task ->
             task.group = BasePlugin.BUILD_GROUP
-            task.dependsOn("npmSetup", versionDir.asTaskName(settings.compileTaskName))
+            task.dependsOn(versionDir.asTaskName(settings.compileTaskName))
             task.logging.captureStandardOutput(LogLevel.DEBUG)
-            task.logging.captureStandardError(LogLevel.ERROR)
-            task.command.set("@openapitools/openapi-generator-cli")
-            task.args.set(
-                listOf(
-                    "generate",
-                    "-i",
-                    (versionDir + "build/${settings.schemaProjectArtifactId}.json").absolutePath,
-                    "-g",
-                    "html2",
-                    "-o",
-                    (versionDir + "docs").absolutePath
-                )
-            )
-            task.doLast {
-                deleteIfExists(File(project.rootDir, "openapitools.json"))
-                deleteIfExists(versionDir + "docs/.openapi-generator")
-                deleteIfExists(versionDir + "docs/.openapi-generator-ignore")
-                deleteIfExists(versionDir + "docs/README.md")
-            }
+            task.logging.captureStandardError(LogLevel.DEBUG)
+            task.generatorName.set("html2")
+            task.inputSpec.set((versionDir + "build/${settings.schemaProjectArtifactId}.json").absolutePath)
+            task.outputDir.set((versionDir + "docs").absolutePath)
+            task.doLast(object: Action<Task> {
+                override fun execute(t: Task) {
+                    deleteIfExists(File(project.rootDir, "openapitools.json"))
+                    deleteIfExists(versionDir + "docs/.openapi-generator")
+                    deleteIfExists(versionDir + "docs/.openapi-generator-ignore")
+                    deleteIfExists(versionDir + "docs/README.md")
+                }
+            })
         }
     }
 

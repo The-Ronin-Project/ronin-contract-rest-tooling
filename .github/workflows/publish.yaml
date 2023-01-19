@@ -3,9 +3,6 @@ name: Publish Image
 on:
   push:
     branches: [main]
-  schedule:
-    # 12:00 UTC every monday
-    - cron: "0 12 * * 1"
   workflow_dispatch:
     inputs:
       image_to_build:
@@ -55,6 +52,25 @@ jobs:
           echo ${TAG}
           echo ::set-output name=image_tag::$(echo "${TAG}")
 
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: 11
+          distribution: "zulu"
+
+      - name: Run Tests
+        if: github.event_name == 'pull_request'
+        id: run_tests
+        run: ./gradlew assemble check publishToMavenLocal
+
+      - name: Publish Artifact
+        if: github.event_name != 'pull_request'
+        id: publish_artifact
+        run: ./gradlew assemble check publishToMavenLocal publish
+        env:
+          NEXUS_USER: ${{ secrets.NEXUS_MAVEN_USER }}
+          NEXUS_TOKEN: ${{ secrets.NEXUS_MAVEN_TOKEN }}
+
       - name: Build specific image if PR
         if: github.event_name == 'pull_request'
         run: docker build --platform linux/amd64,linux/arm64 --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }}-PR .
@@ -66,22 +82,3 @@ jobs:
           docker build --platform linux/amd64,linux/arm64 --push --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }} \
                                                                  --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:v1 .
         working-directory: ./
-
-      - name: Set up JDK 11
-        uses: actions/setup-java@v2
-        with:
-          java-version: 11
-          distribution: "zulu"
-
-      - name: Run Tests
-        if: github.event_name == 'pull_request'
-        id: run_tests
-        run: ./gradlew check
-
-      - name: Publish Artifact
-        if: github.event_name != 'pull_request'
-        id: publish_artifact
-        run: ./gradlew assemble publish
-        env:
-          NEXUS_USER: ${{ secrets.NEXUS_MAVEN_USER }}
-          NEXUS_TOKEN: ${{ secrets.NEXUS_MAVEN_TOKEN }}
