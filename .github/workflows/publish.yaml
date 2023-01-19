@@ -59,17 +59,12 @@ jobs:
           distribution: "zulu"
 
       - name: Run Tests
-        if: github.event_name == 'pull_request'
         id: run_tests
-        run: ./gradlew assemble check publishToMavenLocal
+        run: ./gradlew check
 
-      - name: Publish Artifact
-        if: github.event_name != 'pull_request'
-        id: publish_artifact
-        run: ./gradlew assemble check publishToMavenLocal publish
-        env:
-          NEXUS_USER: ${{ secrets.NEXUS_MAVEN_USER }}
-          NEXUS_TOKEN: ${{ secrets.NEXUS_MAVEN_TOKEN }}
+      - name: Generate Artifacts
+        id: generate_artifact
+        run: ./gradlew assemble publishToMavenLocal
 
       - name: Build specific image if PR
         if: github.event_name == 'pull_request'
@@ -82,3 +77,11 @@ jobs:
           docker build --platform linux/amd64,linux/arm64 --push --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }} \
                                                                  --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:v1 .
         working-directory: ./
+
+      - name: Publish Artifact
+        if: github.event_name != 'pull_request'
+        id: publish_artifact
+        run: ./gradlew publish
+        env:
+          NEXUS_USER: ${{ secrets.NEXUS_MAVEN_USER }}
+          NEXUS_TOKEN: ${{ secrets.NEXUS_MAVEN_TOKEN }}
