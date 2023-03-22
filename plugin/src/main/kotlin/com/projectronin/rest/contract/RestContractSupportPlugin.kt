@@ -27,6 +27,7 @@ import org.gradle.api.tasks.TaskContainer
 import org.gradle.api.tasks.bundling.Compression
 import org.gradle.api.tasks.bundling.Tar
 import org.gradle.language.base.plugins.LifecycleBasePlugin
+import org.openapitools.generator.gradle.plugin.tasks.GenerateTask
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -34,7 +35,6 @@ import java.net.URI
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import org.openapitools.generator.gradle.plugin.tasks.GenerateTask
 
 /**
  * A simple 'hello world' plugin.
@@ -67,6 +67,10 @@ class RestContractSupportPlugin : Plugin<Project> {
             "notagitrepository"
         }
 
+        val extension = project.extensions.create("rest-contract-support", RestContractSupportExtension::class.java).apply {
+            disableLinting.convention(false)
+        }
+
         val settings = SettingsImpl(
             schemaProjectArtifactId = project.name,
             schemaProjectDateString = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
@@ -97,6 +101,7 @@ class RestContractSupportPlugin : Plugin<Project> {
             task.group = LifecycleBasePlugin.VERIFICATION_GROUP
             task.dependsOn("npmSetup")
             task.command.set("@stoplight/spectral-cli@~6.6.0")
+            task.enabled = !extension.disableLinting.get()
             task.args.set(
                 listOf(
                     "lint",

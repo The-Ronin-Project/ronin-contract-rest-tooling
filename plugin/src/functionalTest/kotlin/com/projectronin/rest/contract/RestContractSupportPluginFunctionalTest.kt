@@ -174,6 +174,30 @@ class RestContractSupportPluginFunctionalTest {
     }
 
     @Test
+    fun `linting does not fail if we disable linting`() {
+        val result = setupTestProject(
+            listOf("lintApi"),
+            extraBuildFileText = """
+                
+                configure<com.projectronin.rest.contract.RestContractSupportExtension> {
+                    disableLinting.set(true)
+                }
+                
+            """.trimIndent()
+        ) {
+            val v1Tree = (getProjectDir() + "v1/questionnaire.json").readTree()
+            v1Tree.remove("tags")
+            (getProjectDir() + "v1/questionnaire.json").writeValue(v1Tree)
+
+            val v2Tree = (getProjectDir() + "v2/questionnaire.yml").readTree()
+            (v2Tree["paths"]["/questionnaire"]["post"] as ObjectNode).remove("tags")
+            (getProjectDir() + "v2/questionnaire.yml").writeValue(v2Tree)
+        }
+
+        assertThat(result.output).contains("Task :lintApi SKIPPED")
+    }
+
+    @Test
     fun `check succeeds`() {
         val result = setupTestProject(
             listOf("check"),
@@ -524,6 +548,7 @@ class RestContractSupportPluginFunctionalTest {
         runner.withPluginClasspath()
         runner.withArguments(buildArguments)
         runner.withProjectDir(getProjectDir())
+        // runner.withDebug(true)
         return if (fail) {
             runner.buildAndFail()
         } else {

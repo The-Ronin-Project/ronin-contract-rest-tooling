@@ -1,8 +1,10 @@
 package com.projectronin.rest.contract.model
 
 import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.databind.node.TextNode
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.projectronin.rest.contract.util.WriterFactory
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.core.util.Json
@@ -19,6 +21,8 @@ class VersionDir(val dir: File, settings: Settings) {
 
     companion object {
         private val logger: Logger = LoggerFactory.getLogger(VersionDir::class.java)
+        private val simpleObjectMapper: ObjectMapper = ObjectMapper()
+        private val yamlObjectMapper: ObjectMapper = ObjectMapper(YAMLFactory())
     }
 
     val name: String = dir.name
@@ -39,7 +43,7 @@ class VersionDir(val dir: File, settings: Settings) {
     fun asTaskName(taskPrefix: String) = "$taskPrefix-$name"
     val openApiSpec: OpenAPI by lazy {
         OpenAPIParser().readLocation(
-            schema.toURI().toString(),
+            schema.absolutePath.toString(),
             null,
             ParseOptions().apply {
                 @Suppress("UsePropertyAccessSyntax")
@@ -47,7 +51,13 @@ class VersionDir(val dir: File, settings: Settings) {
             }
         ).openAPI
     }
-    private val semanticVersion: Semver by lazy { Semver(openApiSpec.info.version) }
+    private val semanticVersion: Semver by lazy { Semver(
+        if (schema.extension == "json") {
+            simpleObjectMapper.readTree(schema)["info"]["version"].textValue()
+        } else {
+            yamlObjectMapper.readTree(schema)["info"]["version"].textValue()
+        }
+    ) }
     private val versionNumber = dir.name.replace("[^0-9]".toRegex(), "").toInt()
     private val extendedVersion = "v$versionNumber-${settings.schemaProjectDateString}-${settings.schemaProjectShortHash}"
     operator fun plus(subDirectory: String): File = File(dir, subDirectory)

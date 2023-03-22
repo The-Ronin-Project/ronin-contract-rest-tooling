@@ -1,5 +1,5 @@
 group = "com.projectronin.rest.contract"
-version = "1.1.0"
+version = "1.2.0"
 
 plugins {
     // Apply the Java Gradle plugin development plugin to add support for developing Gradle plugins
@@ -38,12 +38,12 @@ dependencies {
 
     // Use the Kotlin JDK 8 standard library.
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    implementation("io.swagger.core.v3:swagger-core:2.2.7")
-    implementation("io.swagger.parser.v3:swagger-parser:2.1.9")
-    implementation("org.semver4j:semver4j:4.0.0")
+    implementation("io.swagger.core.v3:swagger-core:2.2.8")
+    implementation("io.swagger.parser.v3:swagger-parser:2.1.12")
+    implementation("org.semver4j:semver4j:4.3.0")
     implementation("com.github.node-gradle:gradle-node-plugin:3.5.0")
-    implementation("org.eclipse.jgit:org.eclipse.jgit:6.4.0.202211300538-r")
-    implementation("org.openapitools:openapi-generator-gradle-plugin:6.2.1")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.5.0.202303070854-r")
+    implementation("org.openapitools:openapi-generator-gradle-plugin:6.4.0")
 }
 
 testing {
