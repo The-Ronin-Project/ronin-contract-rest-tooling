@@ -1,5 +1,5 @@
 group = "com.projectronin.rest.contract"
-version = "1.2.0"
+version = "1.2.1"
 
 plugins {
     // Apply the Java Gradle plugin development plugin to add support for developing Gradle plugins
@@ -65,6 +65,8 @@ testing {
                 implementation("org.assertj:assertj-core:3.23.1")
                 implementation("com.fasterxml.jackson.core:jackson-databind:2.14.0")
                 implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.14.0")
+                implementation("org.testcontainers:testcontainers:1.17.6")
+                implementation("com.squareup.okhttp3:okhttp:4.10.0")
             }
 
             targets {

@@ -5,13 +5,21 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.databind.node.TextNode
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.assertj.core.api.Assertions.assertThat
 import org.gradle.internal.impldep.org.eclipse.jgit.api.Git
 import org.gradle.testkit.runner.BuildResult
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
+import org.testcontainers.containers.GenericContainer
+import org.testcontainers.containers.wait.strategy.Wait
+import org.testcontainers.utility.DockerImageName
 import java.io.File
+import java.net.URL
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 
 /**
@@ -32,13 +40,41 @@ class RestContractSupportPluginFunctionalTest {
     fun `lists all the correct tasks`() {
         val result = setupTestProject(listOf("tasks", "--stacktrace"))
         listOf(
-            "cleanApiOutput", "compileApi", "compileApi-v1", "compileApi-v2", "downloadApiDependencies",
-            "downloadApiDependencies-v1", "downloadApiDependencies-v2", "generateApiDocumentation", "generateApiDocumentation-v1", "generateApiDocumentation-v2",
-            "incrementApiVersion", "incrementApiVersion-v1", "incrementApiVersion-v2", "tarApi", "tarApi-v1",
-            "tarApi-v2", "cleanApiOutput-v1", "cleanApiOutput-v2", "generateApiDocumentation-v1", "generateApiDocumentation-v2",
-            "publish", "publishToMavenLocal", "publishV1ExtendedPublicationToMavenLocal", "publishV1ExtendedPublicationToNexusRepository", "publishV1PublicationToMavenLocal",
-            "publishV1PublicationToNexusRepository", "publishV2ExtendedPublicationToMavenLocal", "publishV2ExtendedPublicationToNexusRepository", "publishV2PublicationToMavenLocal",
-            "publishV2PublicationToNexusRepository", "lintApi",
+            "cleanApiOutput",
+            "compileApi",
+            "compileApi-v1",
+            "compileApi-v2",
+            "downloadApiDependencies",
+            "downloadApiDependencies-v1",
+            "downloadApiDependencies-v2",
+            "generateApiDocumentation",
+            "generateApiDocumentation-v1",
+            "generateApiDocumentation-v2",
+            "incrementApiVersion",
+            "incrementApiVersion-v1",
+            "incrementApiVersion-v2",
+            "tarApi",
+            "tarApi-v1",
+            "tarApi-v2",
+            "cleanApiOutput-v1",
+            "cleanApiOutput-v2",
+            "generateApiDocumentation-v1",
+            "generateApiDocumentation-v2",
+            "publish",
+            "publishToMavenLocal",
+            "publishV1ExtendedPublicationToMavenLocal",
+            "publishV1ExtendedPublicationToNexusSnapshotsRepository",
+            "publishV1ExtendedPublicationToNexusReleasesRepository",
+            "publishV1PublicationToMavenLocal",
+            "publishV1PublicationToNexusSnapshotsRepository",
+            "publishV1PublicationToNexusReleasesRepository",
+            "publishV2ExtendedPublicationToMavenLocal",
+            "publishV2ExtendedPublicationToNexusSnapshotsRepository",
+            "publishV2ExtendedPublicationToNexusReleasesRepository",
+            "publishV2PublicationToMavenLocal",
+            "publishV2PublicationToNexusSnapshotsRepository",
+            "publishV2PublicationToNexusReleasesRepository",
+            "lintApi",
         ).forEach { taskName ->
             assertThat(result.output).contains(taskName)
         }
@@ -48,12 +84,28 @@ class RestContractSupportPluginFunctionalTest {
     fun `lists all the correct tasks with only v1`() {
         val result = setupTestProject(listOf("tasks", "--stacktrace"), includeV2 = false)
         listOf(
-            "cleanApiOutput", "compileApi", "compileApi-v1", "downloadApiDependencies",
-            "downloadApiDependencies-v1", "generateApiDocumentation", "generateApiDocumentation-v1",
-            "incrementApiVersion", "incrementApiVersion-v1", "tarApi", "tarApi-v1",
-            "cleanApiOutput-v1", "generateApiDocumentation-v1",
-            "publish", "publishToMavenLocal", "publishV1ExtendedPublicationToMavenLocal", "publishV1ExtendedPublicationToNexusRepository", "publishV1PublicationToMavenLocal",
-            "publishV1PublicationToNexusRepository", "lintApi",
+            "cleanApiOutput",
+            "compileApi",
+            "compileApi-v1",
+            "downloadApiDependencies",
+            "downloadApiDependencies-v1",
+            "generateApiDocumentation",
+            "generateApiDocumentation-v1",
+            "incrementApiVersion",
+            "incrementApiVersion-v1",
+            "tarApi",
+            "tarApi-v1",
+            "cleanApiOutput-v1",
+            "generateApiDocumentation-v1",
+            "publish",
+            "publishToMavenLocal",
+            "publishV1ExtendedPublicationToMavenLocal",
+            "publishV1ExtendedPublicationToNexusSnapshotsRepository",
+            "publishV1ExtendedPublicationToNexusReleasesRepository",
+            "publishV1PublicationToMavenLocal",
+            "publishV1PublicationToNexusSnapshotsRepository",
+            "publishV1PublicationToNexusReleasesRepository",
+            "lintApi",
         ).forEach { taskName ->
             assertThat(result.output).contains(taskName)
         }
@@ -468,6 +520,128 @@ class RestContractSupportPluginFunctionalTest {
         assertThat(hostRepositoryDir + "com/projectronin/rest/contract/bar/bar.txt").exists()
     }
 
+    @Test
+    fun `remote publish succeeds`() {
+        val secret = UUID.randomUUID().toString()
+        val container = GenericContainer(DockerImageName.parse("dzikoysk/reposilite:3.4.0"))
+            .withEnv("REPOSILITE_OPTS", "--token admin:$secret")
+            .withExposedPorts(8080)
+            .waitingFor(Wait.forLogMessage(".*Uptime:.*", 1))
+        kotlin.runCatching { container.start() }
+            .onFailure { e ->
+                println(container.getLogs())
+                throw e
+            }
+
+        val containerPort = container.getMappedPort(8080)
+
+        val httpClient = OkHttpClient.Builder()
+            .connectTimeout(60L, TimeUnit.SECONDS)
+            .readTimeout(60L, TimeUnit.SECONDS)
+            .build()
+
+        try {
+            val m2RepositoryDir = getProjectDir() + ".m2/repository"
+            val result = setupTestProject(
+                listOf(
+                    "publishToMavenLocal",
+                    "publish",
+                    "--stacktrace",
+                    "-Pnexus-user=admin",
+                    "-Pnexus-password=$secret",
+                    "-Pnexus-snapshot-repo=http://localhost:$containerPort/snapshots",
+                    "-Pnexus-release-repo=http://localhost:$containerPort/releases/",
+                    "-Pnexus-insecure=true"
+                ),
+                prependedBuildFileText = """
+                    System.setProperty("maven.repo.local", "$m2RepositoryDir")
+                """.trimIndent(),
+                settingsText = """
+                    rootProject.name = "questionnaire"
+                """.trimIndent(),
+            ) {
+                m2RepositoryDir.mkdirs()
+                (getProjectDir() + "v2/questionnaire.yml").setVersion("2.0.0-SNAPSHOT")
+            }
+
+            assertThat(result.output).contains("Task :publishV1ExtendedPublicationToNexusReleasesRepository\n")
+            assertThat(result.output).contains("Task :publishV1ExtendedPublicationToNexusSnapshotsRepository SKIPPED")
+            assertThat(result.output).contains("Task :publishV1PublicationToNexusReleasesRepository\n")
+            assertThat(result.output).contains("Task :publishV1PublicationToNexusSnapshotsRepository SKIPPED")
+            assertThat(result.output).contains("Task :publishV2ExtendedPublicationToNexusReleasesRepository\n")
+            assertThat(result.output).contains("Task :publishV2ExtendedPublicationToNexusSnapshotsRepository SKIPPED")
+            assertThat(result.output).contains("Task :publishV2PublicationToNexusReleasesRepository SKIPPED")
+            assertThat(result.output).contains("Task :publishV2PublicationToNexusSnapshotsRepository\n")
+
+            val gitHash = Git.open(getProjectDir()).repository.refDatabase.findRef("HEAD").objectId.abbreviate(7).name()
+            val dateString = m2RepositoryDir.walk().find { it.name.matches("v1-[0-9]+-$gitHash".toRegex()) }?.name?.replace("v1-([0-9]+)-$gitHash".toRegex(), "$1") ?: "undated"
+
+            fun verifyFile(
+                isSnapshot: Boolean,
+                version: String,
+                extension: String,
+                artifact: String = "questionnaire",
+                packageDir: String = "com/projectronin/rest/contract",
+                expectedCode: Int = 200,
+                realVersion: String = version,
+            ) {
+                httpClient.newCall(
+                    Request.Builder()
+                        .head()
+                        .url("http://localhost:$containerPort/${if (isSnapshot) "snapshots" else "releases"}/$packageDir/$artifact/$version/$artifact-$realVersion.$extension")
+                        .build()
+                )
+                    .execute().use { response ->
+                        assertThat(response.code).isEqualTo(expectedCode)
+                    }
+            }
+
+            verifyFile(false, "1.0.0", "json")
+            verifyFile(false, "1.0.0", "yaml")
+            verifyFile(false, "1.0.0", "tar.gz")
+
+            // /api/maven/details/snapshots/com/projectronin/rest/contract/questionnaire/2.0.0-SNAPSHOT
+            val tree = jsonMapper.readTree(URL("http://localhost:$containerPort/api/maven/details/snapshots/com/projectronin/rest/contract/questionnaire/2.0.0-SNAPSHOT"))
+            val actualSnapshotVersion = tree["files"].find { jn -> jn["name"].textValue().endsWith(".pom") }!!["name"].textValue().replace("""questionnaire-(.+)\.pom""".toRegex(), "$1")
+
+            verifyFile(true, "2.0.0-SNAPSHOT", "tar.gz", realVersion = actualSnapshotVersion)
+            verifyFile(true, "2.0.0-SNAPSHOT", "yaml", realVersion = actualSnapshotVersion)
+            verifyFile(true, "2.0.0-SNAPSHOT", "json", realVersion = actualSnapshotVersion)
+            verifyFile(false, "v1-$dateString-$gitHash", "json")
+            verifyFile(false, "v1-$dateString-$gitHash", "yaml")
+            verifyFile(false, "v1-$dateString-$gitHash", "tar.gz")
+            verifyFile(false, "v2-$dateString-$gitHash", "tar.gz")
+            verifyFile(false, "v2-$dateString-$gitHash", "yaml")
+            verifyFile(false, "v2-$dateString-$gitHash", "json")
+
+            // let's run the project again
+            val secondResult = runProjectBuild(
+                buildArguments = listOf(
+                    "publishToMavenLocal",
+                    "publish",
+                    "--stacktrace",
+                    "-Pnexus-user=admin",
+                    "-Pnexus-password=$secret",
+                    "-Pnexus-snapshot-repo=http://localhost:$containerPort/snapshots",
+                    "-Pnexus-release-repo=http://localhost:$containerPort/releases/",
+                    "-Pnexus-insecure=true"
+                ),
+                fail = false
+            )
+            assertThat(secondResult.output).contains("Task :publishV1ExtendedPublicationToNexusReleasesRepository\n")
+            assertThat(secondResult.output).contains("Task :publishV1ExtendedPublicationToNexusSnapshotsRepository SKIPPED")
+            assertThat(secondResult.output).contains("Task :publishV1PublicationToNexusReleasesRepository SKIPPED")
+            assertThat(secondResult.output).contains("Task :publishV1PublicationToNexusSnapshotsRepository SKIPPED") // this time republish of identical content should be skipped
+            assertThat(secondResult.output).contains("Task :publishV2ExtendedPublicationToNexusReleasesRepository\n")
+            assertThat(secondResult.output).contains("Task :publishV2ExtendedPublicationToNexusSnapshotsRepository SKIPPED")
+            assertThat(secondResult.output).contains("Task :publishV2PublicationToNexusReleasesRepository SKIPPED")
+            assertThat(secondResult.output).contains("Task :publishV2PublicationToNexusSnapshotsRepository\n")
+
+        } finally {
+            container.stop()
+        }
+    }
+
     private fun mapperForFile(file: File): ObjectMapper = if (file.name.endsWith(".json")) jsonMapper else yamlMapper
 
     private fun File.setVersion(version: String) {
@@ -496,7 +670,7 @@ class RestContractSupportPluginFunctionalTest {
         prependedBuildFileText: String = "",
         extraBuildFileText: String? = null,
         fail: Boolean = false,
-        extraStuffToDo: () -> Unit = {}
+        extraStuffToDo: () -> Unit = {},
     ): BuildResult {
         val git = Git.init().setDirectory(getProjectDir()).call()
         File(getProjectDir(), ".gitignore").writeText(".idea/")
@@ -543,12 +717,16 @@ class RestContractSupportPluginFunctionalTest {
         println("=".repeat(80))
 
         // Run the build
+        return runProjectBuild(buildArguments, fail)
+    }
+
+    private fun runProjectBuild(buildArguments: List<String>, fail: Boolean): BuildResult {
         val runner = GradleRunner.create()
         runner.forwardOutput()
         runner.withPluginClasspath()
         runner.withArguments(buildArguments)
         runner.withProjectDir(getProjectDir())
-        // runner.withDebug(true)
+        runner.withDebug(System.getenv("DEBUG_RUNNER")?.lowercase() == "true")
         return if (fail) {
             runner.buildAndFail()
         } else {

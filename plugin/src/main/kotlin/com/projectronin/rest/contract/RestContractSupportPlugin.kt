@@ -5,8 +5,10 @@ import com.projectronin.rest.contract.model.Settings
 import com.projectronin.rest.contract.model.SettingsImpl
 import com.projectronin.rest.contract.model.VersionDir
 import com.projectronin.rest.contract.model.VersionIncrement
+import com.projectronin.rest.contract.model.VersionPublicationGroup
 import com.projectronin.rest.contract.util.WriterFactory
 import io.swagger.v3.core.util.Json
+import org.apache.commons.codec.binary.Hex
 import org.eclipse.jgit.api.Git
 import org.gradle.api.Action
 import org.gradle.api.Plugin
@@ -23,6 +25,7 @@ import org.gradle.api.plugins.BasePlugin
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.internal.DefaultPublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 import org.gradle.api.tasks.TaskContainer
 import org.gradle.api.tasks.bundling.Compression
 import org.gradle.api.tasks.bundling.Tar
@@ -32,6 +35,11 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.security.MessageDigest
+import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -86,6 +94,11 @@ class RestContractSupportPlugin : Plugin<Project> {
             publishCopyTaskName = "copyHostRepoIfNecessary",
             incrementVersionTaskName = "incrementApiVersion",
             mappedMavenRepo = File(project.properties.getOrDefault("host-repository", "/home/ronin/host-repository").toString()),
+            nexusReleaseRepo = project.properties.getOrDefault("nexus-release-repo", "https://repo.devops.projectronin.io/repository/maven-releases/").toString(),
+            nexusSnapshotRepo = project.properties.getOrDefault("nexus-snapshot-repo", "https://repo.devops.projectronin.io/repository/maven-snapshots/").toString(),
+            nexusUsername = project.properties.getOrDefault("nexus-user", System.getenv("NEXUS_USER"))?.toString(),
+            nexusPassword = project.properties.getOrDefault("nexus-password", System.getenv("NEXUS_TOKEN"))?.toString(),
+            isNexusInsecure = project.properties.getOrDefault("nexus-insecure", "false").toString().toBoolean(),
         )
 
         val versionFiles = project.versionFiles(settings)
@@ -224,16 +237,22 @@ class RestContractSupportPlugin : Plugin<Project> {
                 project.logger.info("Adding maven repository")
                 repositories { rh ->
                     rh.maven { mar ->
-                        mar.name = "nexus"
+                        mar.name = "nexusSnapshots"
+                        mar.isAllowInsecureProtocol = settings.isNexusInsecure
                         mar.credentials { pc ->
-                            pc.username = System.getenv("NEXUS_USER")
-                            pc.password = System.getenv("NEXUS_TOKEN")
+                            pc.username = settings.nexusUsername
+                            pc.password = settings.nexusPassword
                         }
-                        mar.url = if (project.version.toString().endsWith("SNAPSHOT")) {
-                            URI("https://repo.devops.projectronin.io/repository/maven-snapshots/")
-                        } else {
-                            URI("https://repo.devops.projectronin.io/repository/maven-releases/")
+                        mar.url = URI(settings.nexusSnapshotRepo)
+                    }
+                    rh.maven { mar ->
+                        mar.name = "nexusReleases"
+                        mar.isAllowInsecureProtocol = settings.isNexusInsecure
+                        mar.credentials { pc ->
+                            pc.username = settings.nexusUsername
+                            pc.password = settings.nexusPassword
                         }
+                        mar.url = URI(settings.nexusReleaseRepo)
                     }
                 }
             }
@@ -261,10 +280,60 @@ class RestContractSupportPlugin : Plugin<Project> {
                 task.dependsOn(settings.publishCopyTaskName)
                 task.dependsOn(versionDir.asTaskName(settings.tarTaskName))
             }
-            tasks.getByName(publication.publishTaskName) { task ->
-                task.dependsOn(versionDir.asTaskName(settings.tarTaskName))
+            publication.publishTaskNames.forEach { publishTaskName ->
+                tasks.named(publishTaskName, PublishToMavenRepository::class.java) { task ->
+                    task.dependsOn(versionDir.asTaskName(settings.tarTaskName))
+                    task.onlyIf {
+                        (publication.isSnapshot && task.repository.name == "nexusSnapshots")
+                            || (publication.isRelease && task.repository.name == "nexusReleases" && isSpecificationChanged(publication, task, settings))
+                    }
+                }
             }
         }
+    }
+
+    private fun isSpecificationChanged(
+        publication: VersionPublicationGroup,
+        task: PublishToMavenRepository,
+        settings: SettingsImpl
+    ): Boolean {
+        if (publication.isRelease && !publication.extended) {
+            val expectedJsonContentUri = "${
+                task.repository.url.toString().replace("/$".toRegex(), "")
+            }/${
+                settings.schemaProjectGroupId.replace(".", "/")
+            }/${
+                settings.schemaProjectArtifactId
+            }/${
+                publication.version
+            }/${
+                settings.schemaProjectArtifactId
+            }-${
+                publication.version
+            }.json"
+            val client: HttpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(20))
+                .build()
+            val response: HttpResponse<ByteArray> = client.send(
+                HttpRequest.newBuilder()
+                    .GET()
+                    .uri(URI(expectedJsonContentUri))
+                    .build(),
+                HttpResponse.BodyHandlers.ofByteArray()
+            )
+            if (response.statusCode() == 200) {
+                val existingServerDigest = Hex.encodeHexString(MessageDigest.getInstance("MD5").digest(response.body()))
+                val currentFileDigest = Hex.encodeHexString(
+                    MessageDigest.getInstance("MD5").digest(
+                        publication.extensions.find { ex -> ex.extension == "json" }!!.artifactFile.readBytes()
+                    )
+                )
+                return existingServerDigest != currentFileDigest
+            }
+        }
+        return true
     }
 
     private fun registerTarTask(
@@ -301,7 +370,7 @@ class RestContractSupportPlugin : Plugin<Project> {
             task.generatorName.set("html2")
             task.inputSpec.set((versionDir + "build/${settings.schemaProjectArtifactId}.json").absolutePath)
             task.outputDir.set((versionDir + "docs").absolutePath)
-            task.doLast(object: Action<Task> {
+            task.doLast(object : Action<Task> {
                 override fun execute(t: Task) {
                     deleteIfExists(File(project.rootDir, "openapitools.json"))
                     deleteIfExists(versionDir + "docs/.openapi-generator")

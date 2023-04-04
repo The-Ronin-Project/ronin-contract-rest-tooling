@@ -1,12 +1,17 @@
 package com.projectronin.rest.contract.model
 
 class VersionPublicationGroup(
-    versionNumber: Int,
-    extended: Boolean,
+    val versionNumber: Int,
+    val extended: Boolean,
     val version: String,
     val extensions: List<VersionPublicationArtifact>,
 ) {
+    val isSnapshot = version.contains("SNAPSHOT") && !extended
+    val isRelease = !isSnapshot
     val publicationName = "V$versionNumber${if (extended) "Extended" else ""}"
-    val publishTaskName = "publish${publicationName}PublicationToNexusRepository"
+    val publishTaskNames: List<String> = listOf(
+        "publish${publicationName}PublicationToNexusSnapshotsRepository",
+        "publish${publicationName}PublicationToNexusReleasesRepository"
+    )
     val localPublishTaskName = "publish${publicationName}PublicationToMavenLocal"
 }

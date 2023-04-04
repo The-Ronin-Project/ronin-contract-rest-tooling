@@ -16,6 +16,11 @@ interface Settings {
     val publishCopyTaskName: String
     val incrementVersionTaskName: String
     val mappedMavenRepo: File
+    val nexusReleaseRepo: String
+    val nexusSnapshotRepo: String
+    val nexusUsername: String?
+    val nexusPassword: String?
+    val isNexusInsecure: Boolean // only use this for testing
 }
 
 data class SettingsImpl(
@@ -32,4 +37,9 @@ data class SettingsImpl(
     override val publishCopyTaskName: String,
     override val incrementVersionTaskName: String,
     override val mappedMavenRepo: File,
-): Settings
+    override val nexusReleaseRepo: String,
+    override val nexusSnapshotRepo: String,
+    override val nexusUsername: String?,
+    override val nexusPassword: String?,
+    override val isNexusInsecure: Boolean,
+) : Settings
