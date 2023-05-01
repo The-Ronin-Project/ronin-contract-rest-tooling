@@ -163,7 +163,7 @@ In general, either run:
 
 or
 
-`docker run --rm -it -v "$PWD:/app" -v "$HOME/.m2/repository:/home/ronin/host-repository" "docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:<TAG>" gradle <COMMAND> <ARGUMENTS>`
+`docker run --rm -it -v "$PWD:/app" -v "$HOME/.m2/repository:/home/ronin/host-repository" "docker-proxy.devops.projectronin.io/ronin-contract-rest-tooling:<TAG>" gradle <COMMAND> <ARGUMENTS>`
 
 Available commands are mostly general gradle commands.  Important ones are:
 
