@@ -28,7 +28,7 @@ jobs:
         id: qemu
         uses: docker/setup-qemu-action@v1
         with:
-          image: docker-proxy.devops.projectronin.io/tonistiigi/binfmt:latest
+          image: ${{ vars.DOCKER_READ_REPO }}/tonistiigi/binfmt:latest
 
       - name: Set up Docker Buildx
         id: buildx
@@ -36,14 +36,14 @@ jobs:
         with:
           install: true
           endpoint: builder
-          driver-opts: image=docker-proxy.devops.projectronin.io/moby/buildkit:v0.10.6
+          driver-opts: image=${{ vars.DOCKER_READ_REPO }}/moby/buildkit:v0.10.6
 
       - name: Login to Repo
         run: |-
           docker login \
           -u "${{secrets.NEXUS_DOCKER_USERNAME}}" \
           -p "${{secrets.NEXUS_DOCKER_PASSWORD}}" \
-          docker-repo.devops.projectronin.io
+          ${{ vars.DOCKER_WRITE_REPO }}
 
       - name: Get image tag
         id: get_image_tag
@@ -68,14 +68,14 @@ jobs:
 
       - name: Build specific image if PR
         if: github.event_name == 'pull_request'
-        run: docker build --platform linux/amd64,linux/arm64 --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }}-PR .
+        run: docker build --platform linux/amd64,linux/arm64 --tag ${{ vars.DOCKER_WRITE_REPO }}/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }}-PR .
         working-directory: ./
 
       - name: Build and push main branch images
         if: github.event_name != 'pull_request'
         run: |-
-          docker build --platform linux/amd64,linux/arm64 --push --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }} \
-                                                                 --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:v1 .
+          docker build --platform linux/amd64,linux/arm64 --push --tag ${{ vars.DOCKER_WRITE_REPO }}/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }} \
+                                                                 --tag ${{ vars.DOCKER_WRITE_REPO }}/ronin-contract-rest-tooling:v1 .
         working-directory: ./
 
       - name: Publish Artifact
