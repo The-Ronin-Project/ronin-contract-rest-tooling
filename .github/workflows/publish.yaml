@@ -1,14 +1,10 @@
-name: Publish Image
+name: Build and publish
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      image_to_build:
-        description: "A specific image--or build dir--to build."
-        required: false
-        default: "all"
+    branches: [ main ]
+    tags:
+      - 'v*.*.*'
   pull_request:
 jobs:
   image-publish:
@@ -18,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          fetch-depth: 20
+          fetch-depth: 0
 
       - name: Set up Docker Context for Buildx
         id: buildx-context
@@ -43,45 +39,30 @@ jobs:
           docker login \
           -u "${{secrets.NEXUS_DOCKER_USERNAME}}" \
           -p "${{secrets.NEXUS_DOCKER_PASSWORD}}" \
-          docker-repo.devops.projectronin.io
+          ${{ vars.DOCKER_WRITE_REPO }}
 
       - name: Get image tag
         id: get_image_tag
         run: |-
-          TAG=$(echo "$(git rev-parse --short HEAD)")
-          echo ${TAG}
-          echo ::set-output name=image_tag::$(echo "${TAG}")
-
-      - name: Set up JDK 11
-        uses: actions/setup-java@v2
-        with:
-          java-version: 11
-          distribution: "zulu"
-
-      - name: Run Tests
-        id: run_tests
-        run: ./gradlew check
-
-      - name: Generate Artifacts
-        id: generate_artifact
-        run: ./gradlew assemble publishToMavenLocal
-
-      - name: Build specific image if PR
-        if: github.event_name == 'pull_request'
-        run: docker build --platform linux/amd64,linux/arm64 --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }}-PR .
-        working-directory: ./
+          echo "============================ TAGS ==============================="
+          git tag
+          echo "================================================================="
+          TAG=$(git describe --tags)
+          echo "tag=${TAG}" >> "$GITHUB_ENV"
+          if [[ ${REF_TYPE} == "tag" ]]; then
+            SECOND_TAG_PREFIX="--tag"
+            SECOND_TAG=${{ vars.DOCKER_WRITE_REPO }}/ronin-contract-rest-tooling:v$(echo "${TAG}" | perl -p -e 's/^v?([0-9]+)\..*$/$1/g')
+          else
+            SECOND_TAG_PREFIX=""
+            SECOND_TAG=""
+          fi
+          echo "second_tag=${SECOND_TAG}" >> "$GITHUB_ENV"
+          echo "second_tag_prefix=${SECOND_TAG_PREFIX}" >> "$GITHUB_ENV"
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.head_ref || github.ref_name }}
 
       - name: Build and push main branch images
-        if: github.event_name != 'pull_request'
         run: |-
-          docker build --platform linux/amd64,linux/arm64 --push --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:${{ steps.get_image_tag.outputs.image_tag }} \
-                                                                 --tag docker-repo.devops.projectronin.io/ronin-contract-rest-tooling:v1 .
+          docker build --platform linux/amd64,linux/arm64 --push --tag ${{ vars.DOCKER_WRITE_REPO }}/ronin-contract-rest-tooling:${{ env.tag }} ${{ env.second_tag_prefix }} ${{ env.second_tag }} .
         working-directory: ./
-
-      - name: Publish Artifact
-        if: github.event_name != 'pull_request'
-        id: publish_artifact
-        run: ./gradlew publish
-        env:
-          NEXUS_USER: ${{ secrets.NEXUS_MAVEN_USER }}
-          NEXUS_TOKEN: ${{ secrets.NEXUS_MAVEN_TOKEN }}
